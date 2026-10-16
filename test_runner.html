@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Antigravity Chess - Engine Rule Verification Suite</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 32px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+    .badge-pass { background: #065f46; color: #34d399; }
+    .badge-fail { background: #991b1b; color: #f87171; }
+    .test-list {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 0.9rem;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .test-item {
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      justify-content: space-between;
+    }
+    .test-item:last-child {
+      border-bottom: none;
+    }
+    .pass { color: #34d399; font-weight: 600; }
+    .fail { color: #f87171; font-weight: 600; }
+    a { color: #818cf8; text-decoration: none; font-weight: 600; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <h1>🧪 Antigravity Chess Engine - Verification Suite</h1>
+  <p style="color: #94a3b8; margin-bottom: 16px;">Automated FIDE rule compliance test runner.</p>
+  <div id="summary-badge" class="badge">Running tests...</div>
+
+  <div class="test-list" id="test-list"></div>
+
+  <p style="margin-top: 24px;">
+    <a href="index.html">← Back to Chess Game</a>
+  </p>
+
+  <script src="js/engine.js"></script>
+  <script>
+    const list = document.getElementById('test-list');
+    let passCount = 0;
+    let failCount = 0;
+
+    function assert(name, condition) {
+      const row = document.createElement('div');
+      row.className = 'test-item';
+      if (condition) {
+        passCount++;
+        row.innerHTML = `<span>${name}</span> <span class="pass">✓ PASS</span>`;
+      } else {
+        failCount++;
+        row.innerHTML = `<span>${name}</span> <span class="fail">✗ FAIL</span>`;
+      }
+      list.appendChild(row);
+    }
+
+    try {
+      // 1. Initial State
+      const e = new ChessEngine();
+      assert('Initial FEN string', e.getFEN() === 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+      assert('Initial legal moves count = 20', e.getAllLegalMoves('w').length === 20);
+
+      // 2. Pawn mechanics
+      e.makeMove('e2', 'e4');
+      assert('Pawn 2-square step registers en-passant square', e.enPassant && e.enPassant.row === 5 && e.enPassant.col === 4);
+      e.makeMove('e7', 'e5');
+      assert('Black pawn response', e.board[3][4] === 'bP');
+
+      // 3. Knight moves
+      e.makeMove('g1', 'f3');
+      assert('White Knight leaps to f3', e.board[5][5] === 'wN');
+
+      // 4. Scholar\'s Mate (Checkmate)
+      const sm = new ChessEngine();
+      sm.makeMove('e2', 'e4');
+      sm.makeMove('e7', 'e5');
+      sm.makeMove('d1', 'h5');
+      sm.makeMove('b8', 'c6');
+      sm.makeMove('f1', 'c4');
+      sm.makeMove('g8', 'f6');
+      const mateMove = sm.makeMove('h5', 'f7');
+      assert('Scholar\'s mate recognized as Qxf7# checkmate', mateMove.isCheckmate && mateMove.san === 'Qxf7#');
+      assert('Winner detected as White', sm.getGameStatus().winner === 'White');
+
+      // 5. Fool\'s Mate (Fastest Checkmate)
+      const fm = new ChessEngine();
+      fm.makeMove('f2', 'f3');
+      fm.makeMove('e7', 'e5');
+      fm.makeMove('g2', 'g4');
+      const fmRes = fm.makeMove('d8', 'h4');
+      assert('Fool\'s mate Qh4# recognized as Checkmate (Black wins)', fmRes.isCheckmate && fmRes.san === 'Qh4#');
+      assert('Winner detected as Black', fm.getGameStatus().winner === 'Black');
+
+      // 6. Castling Kingside (White & Black)
+      const castlePos = new ChessEngine('r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 4 5');
+      const wCastle = castlePos.makeMove('e1', 'g1');
+      assert('White Kingside Castling (O-O)', wCastle.san === 'O-O' && castlePos.board[7][6] === 'wK' && castlePos.board[7][5] === 'wR');
+      const bCastle = castlePos.makeMove('e8', 'g8');
+      assert('Black Kingside Castling (O-O)', bCastle.san === 'O-O' && castlePos.board[0][6] === 'bK' && castlePos.board[0][5] === 'bR');
+
+      // 7. Castling Queenside
+      const qCastlePos = new ChessEngine('r3k2r/ppp2ppp/2n1bn2/3pp3/3PP3/2N1BN2/PPP2PPP/R3K2R w KQkq - 6 7');
+      const wQCastle = qCastlePos.makeMove('e1', 'c1');
+      assert('White Queenside Castling (O-O-O)', wQCastle.san === 'O-O-O' && qCastlePos.board[7][2] === 'wK' && qCastlePos.board[7][3] === 'wR');
+
+      // 8. Block Castling through Check
+      const checkBlockCastle = new ChessEngine('r3k2r/8/8/8/8/8/4b3/R3K2R w KQkq - 0 1');
+      // Black bishop on e2 attacks d1 or f1? e2 is adjacent. Let's put bishop on a6 attacking f1.
+      const f1Attacked = new ChessEngine('r3k2r/8/b7/8/8/8/8/R3K2R w KQkq - 0 1');
+      // Bishop on a6 (row 2, col 0) attacks: b5, c4, d3, e2, f1! So f1 is attacked.
+      const legalWKingMoves = f1Attacked.getLegalMoves(7, 4);
+      const canKingsideCastle = legalWKingMoves.some(m => m.isCastling === 'k');
+      assert('Castling through attacked square is forbidden', !canKingsideCastle);
+
+      // 9. En Passant Capture
+      const ep = new ChessEngine('rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3');
+      const epMove = ep.makeMove('e5', 'd6');
+      assert('En Passant captures pawn on d5', epMove.san === 'exd6' && ep.board[3][3] === null);
+
+      // 10. Promotion to Queen, Rook, Bishop, Knight
+      const promoPos = new ChessEngine('8/4P3/8/8/8/8/8/k1K5 w - - 0 1');
+      const qPromo = promoPos.makeMove('e7', 'e8', 'Q');
+      assert('Pawn promotion to Queen', qPromo.san === 'e8=Q' && promoPos.board[0][4] === 'wQ');
+
+      // 11. Stalemate
+      const stale = new ChessEngine('k7/8/1Q6/8/8/8/8/2K5 b - - 0 1');
+      assert('Stalemate draws the game', stale.isStalemate() && stale.isDraw());
+
+      // 12. Insufficient Material (K vs K, K+B vs K, K+N vs K)
+      const kvk = new ChessEngine('8/8/8/4k3/8/8/4K3/8 w - - 0 1');
+      assert('King vs King draw by insufficient material', kvk.isInsufficientMaterial() && kvk.isDraw());
+
+      const kbnk = new ChessEngine('8/8/8/4k3/8/8/4KB2/8 w - - 0 1');
+      assert('King + Bishop vs King draw', kbnk.isInsufficientMaterial() && kbnk.isDraw());
+
+      // 13. Undo move
+      const undoTest = new ChessEngine();
+      undoTest.makeMove('e2', 'e4');
+      undoTest.undo();
+      assert('Undo move restores original state', undoTest.board[6][4] === 'wP' && undoTest.turn === 'w');
+
+    } catch (err) {
+      failCount++;
+      assert('Execution error: ' + err.message, false);
+    }
+
+    const badge = document.getElementById('summary-badge');
+    badge.textContent = `${passCount} Passed, ${failCount} Failed`;
+    badge.className = `badge ${failCount === 0 ? 'badge-pass' : 'badge-fail'}`;
+  </script>
+</body>
+</html>
